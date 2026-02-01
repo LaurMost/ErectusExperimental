@@ -1008,57 +1008,43 @@ bool ErectusMemory::MovePlayer()
 
 void ErectusMemory::Noclip(const bool enabled)
 {
-	BYTE noclipOnA[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-	BYTE noclipOffA[] = { 0xE8, 0xE3, 0xC1, 0xFE, 0xFF };
-	BYTE noclipCheckA[sizeof noclipOffA];
+    if (!Utils::Valid(localPlayerPtr))
+        return;
 
-	BYTE noclipOnB[] = { 0x0F, 0x1F, 0x40, 0x00 };
-	BYTE noclipOffB[] = { 0x41, 0xFF, 0x50, 0x40 };
-	BYTE noclipCheckB[sizeof noclipOffB];
+    // Read pointer at Entity + 0xB0
+    std::uintptr_t collisionPtr = 0;
+    if (!ErectusProcess::Rpm(localPlayerPtr + 0xB0, &collisionPtr, sizeof collisionPtr))
+        return;
 
-	BYTE noclipOnC[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-	BYTE noclipOffC[] = { 0xE8, 0xEA, 0x59, 0x34, 0x01 };
-	BYTE noclipCheckC[sizeof noclipOffC];
+    if (!Utils::Valid(collisionPtr))
+        return;
 
-	BYTE noclipOnD[] = { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-	BYTE noclipOffD[] = { 0xFF, 0x15, 0x49, 0x5B, 0xFF, 0x01 };
-	BYTE noclipCheckD[sizeof noclipOffD];
+    // Read collision flags at pointer + 0x28
+    WORD collisionFlags = 0;
+    if (!ErectusProcess::Rpm(collisionPtr + 0x28, &collisionFlags, sizeof collisionFlags))
+        return;
 
-	const auto noclipA = ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_NOCLIP_A, &noclipCheckA, sizeof noclipCheckA);
-	const auto noclipB = ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_NOCLIP_B, &noclipCheckB, sizeof noclipCheckB);
-	const auto noclipC = ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_NOCLIP_C, &noclipCheckC, sizeof noclipCheckC);
-	const auto noclipD = ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_NOCLIP_D, &noclipCheckD, sizeof noclipCheckD);
+    const bool collisionDisabled = (collisionFlags >> 11) & 1;
 
-	if (enabled)
-	{
-		if (noclipA && !memcmp(noclipCheckA, noclipOffA, sizeof noclipOffA))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_A, &noclipOnA, sizeof noclipOnA);
-
-		if (noclipB && !memcmp(noclipCheckB, noclipOffB, sizeof noclipOffB))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_B, &noclipOnB, sizeof noclipOnB);
-
-		if (noclipC && !memcmp(noclipCheckC, noclipOffC, sizeof noclipOffC))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_C, &noclipOnC, sizeof noclipOnC);
-
-		if (noclipD && !memcmp(noclipCheckD, noclipOffD, sizeof noclipOffD))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_D, &noclipOnD, sizeof noclipOnD);
-
-		MovePlayer();
-	}
-	else
-	{
-		if (noclipA && !memcmp(noclipCheckA, noclipOnA, sizeof noclipOnA))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_A, &noclipOffA, sizeof noclipOffA);
-
-		if (noclipB && !memcmp(noclipCheckB, noclipOnB, sizeof noclipOnB))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_B, &noclipOffB, sizeof noclipOffB);
-
-		if (noclipC && !memcmp(noclipCheckC, noclipOnC, sizeof noclipOnC))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_C, &noclipOffC, sizeof noclipOffC);
-
-		if (noclipD && !memcmp(noclipCheckD, noclipOnD, sizeof noclipOnD))
-			ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_NOCLIP_D, &noclipOffD, sizeof noclipOffD);
-	}
+    if (enabled)
+    {
+        // Disable collision (set bit 11)
+        if (!collisionDisabled)
+        {
+            collisionFlags |= 0x800;
+            ErectusProcess::Wpm(collisionPtr + 0x28, &collisionFlags, sizeof collisionFlags);
+        }
+        MovePlayer();
+    }
+    else
+    {
+        // Enable collision (clear bit 11)
+        if (collisionDisabled)
+        {
+            collisionFlags &= 0xF7FF;
+            ErectusProcess::Wpm(collisionPtr + 0x28, &collisionFlags, sizeof collisionFlags);
+        }
+    }
 }
 
 
@@ -1882,4 +1868,5 @@ bool ErectusMemory::PatchDetectFlag()
 	return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_FLAGDETECTED, &patch, sizeof patch);
 
 }
+
 
