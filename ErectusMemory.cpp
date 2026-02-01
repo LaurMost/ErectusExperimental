@@ -838,8 +838,15 @@ bool ErectusMemory::DamageRedirection(const std::uintptr_t targetPtr, std::uintp
 	BYTE pageJmpOff[] = { 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC };
 	BYTE pageJmpCheck[sizeof pageJmpOff];
 
-	BYTE redirectionOn[] = { 0xE9, 0x8B, 0xFE, 0xFF, 0xFF }; //this should be calculated tbh, it's a relative jmp: "jmp (OFFSET_REDIRECTION_JMP - OFFSET_REDIRECTION)"
-	BYTE redirectionOff[] = { 0x48, 0x8B, 0x5C, 0x24, 0x50 };
+	int32_t relOffset = static_cast<int32_t>(OFFSET_REDIRECTION_JMP - (OFFSET_REDIRECTION + 5));
+	BYTE redirectionOn[] = {
+    	0xE9,
+    	static_cast<BYTE>(relOffset),
+    	static_cast<BYTE>(relOffset >> 8),
+    	static_cast<BYTE>(relOffset >> 16),
+   		static_cast<BYTE>(relOffset >> 24)
+	};
+	BYTE redirectionOff[] = { 0x48, 0x8B, 0x7C, 0x24, 0x50 };
 	BYTE redirectionCheck[sizeof redirectionOff];
 
 	if (!ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_REDIRECTION_JMP, &pageJmpCheck, sizeof pageJmpCheck))
@@ -1875,3 +1882,4 @@ bool ErectusMemory::PatchDetectFlag()
 	return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_FLAGDETECTED, &patch, sizeof patch);
 
 }
+
