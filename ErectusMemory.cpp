@@ -1909,35 +1909,73 @@ bool ErectusMemory::VtableSwap(const std::uintptr_t dst, std::uintptr_t src)
 
 bool ErectusMemory::PatchIntegrityCheck()
 {
-	// Initialize return address if not already set
-	if (TextIntegrityCheckReturnAddress == 0)
-		TextIntegrityCheckReturnAddress = ErectusProcess::exe + OFFSET_INTEGRITYCHECK + SIZE_INTEGRITYCHECK;
+	// 1. Define the size of the hook and the prologue.
+	// We need 14 bytes for an absolute JMP [RIP+0] on x64.
+	// Based on TextIntegrityCheck_asm.asm, the prologue instructions are:
+	// mov rax, rsp         (3 bytes)
+	// mov [rax+8], rbx     (4 bytes)
+	// mov [rax+18h], rdi   (4 bytes)
+	// push rbp             (1 byte)
+	// lea rbp, [rax-98h]   (7 bytes)
+	// Total Prologue Size: 19 bytes.
+	// We will overwrite 14 bytes, but we must execute all 19 bytes in our stub 
+	// before jumping back to Start + 19.
+	constexpr size_t hookSize = 14;
+	constexpr size_t prologueSize = 19; 
 
-	// NOTE: This hook installation is designed for an internal/injected build.
-	// For an external tool using ErectusProcess::Wpm, writing a JMP to a local function address
-	// (TextIntegrityCheckHook) will not work in the target process, as the function exists only
-	// in this process's address space.
-	//
-	// To properly implement this for an external tool, you would need to:
-	// 1. Allocate memory in the target process
-	// 2. Write the hook code (TextIntegrityCheckHook and TextIntegrityCheck_asm) to that memory
-	// 3. Write a JMP instruction to the allocated memory
-	//
-	// For now, using the simple patch method as a fallback:
-	char check = 0;
-	return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_INTEGRITYCHECK, &check, sizeof check);
+	const auto funcAddress = ErectusProcess::exe + OFFSET_INTEGRITYCHECK;
 
-	// TODO: For internal/injected build, implement proper hook installation:
-	// BYTE jmpInstruction[14] = {
-	//     0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,  // jmp [rip+0]
-	//     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00  // address placeholder
-	// };
-	// 
-	// // Write the address of TextIntegrityCheckHook into the last 8 bytes
-	// *reinterpret_cast<DWORD64*>(&jmpInstruction[6]) = reinterpret_cast<DWORD64>(&TextIntegrityCheckHook);
-	// 
-	// // Write the JMP to the target location
-	// return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_INTEGRITYCHECK, jmpInstruction, sizeof jmpInstruction);
+	// 2. Allocate memory for our stub in the target process
+	// We need enough space for the Prologue + JMP Back
+	const auto stubAddress = ErectusProcess::AllocEx(128);
+	if (!stubAddress)
+		return false;
+
+	// 3. Prepare the Stub Buffer
+	std::vector<BYTE> stubBuffer;
+
+	// A. Read the actual prologue bytes from the game to be safe (Dynamic Prologue Copy)
+	// This ensures we have the exact instructions even if they vary slightly.
+	BYTE originalBytes[prologueSize];
+	if (!ErectusProcess::Rpm(funcAddress, originalBytes, prologueSize)) {
+		ErectusProcess::FreeEx(stubAddress);
+		return false;
+	}
+	
+	// Append original prologue to stub
+	for (size_t i = 0; i < prologueSize; i++) {
+		stubBuffer.push_back(originalBytes[i]);
+	}
+
+	// B. Append the JMP Back instruction
+	// JMP [RIP+0] -> Followed by absolute address
+	BYTE jmpBack[] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 };
+	for (BYTE b : jmpBack) stubBuffer.push_back(b);
+	
+	// The address to jump back to (Function Start + Prologue Size)
+	uint64_t returnAddress = funcAddress + prologueSize;
+	BYTE* returnAddrBytes = reinterpret_cast<BYTE*>(&returnAddress);
+	for (int i = 0; i < 8; i++) stubBuffer.push_back(returnAddrBytes[i]);
+
+	// 4. Write the Stub to the allocated memory
+	if (!ErectusProcess::Wpm(stubAddress, stubBuffer.data(), stubBuffer.size())) {
+		ErectusProcess::FreeEx(stubAddress);
+		return false;
+	}
+
+	// 5. Create the Hook (JMP to Stub)
+	// We overwrite the start of the function with a jump to our stub.
+	BYTE hookPatch[hookSize];
+	
+	// FF 25 00 00 00 00 (JMP [RIP+0])
+	memcpy(hookPatch, jmpBack, 6);
+	
+	// Address of our stub
+	memcpy(hookPatch + 6, &stubAddress, 8);
+
+	// 6. Apply the Hook
+	// This redirects the game's execution to our stub.
+	return ErectusProcess::Wpm(funcAddress, hookPatch, hookSize);
 }
 
 bool ErectusMemory::PatchDetectFlag()
@@ -1946,6 +1984,7 @@ bool ErectusMemory::PatchDetectFlag()
 	return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_FLAGDETECTED, &patch, sizeof patch);
 
 }
+
 
 
 
