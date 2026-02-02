@@ -9,6 +9,7 @@
 
 #include "ErectusProcess.h"
 #include "Window.hpp"
+#include "features/Cleanup.h"
 #include "features/Looter.h"
 
 App::App(const HINSTANCE hInstance) : appInstance(hInstance)
@@ -25,7 +26,9 @@ App::~App()
 
 void App::Init()
 {
-	appWindow = std::make_unique<Window>(this, GenRandWindowName());
+	Cleanup::RunAll();
+
+	appWindow = std::make_unique<Window>(*this, GenRandWindowName());
 
 	if (!Renderer::Init(appWindow->GetHwnd()))
 		return;
@@ -151,6 +154,17 @@ void App::OnHotkey(const HotKey hotkey)
 		if (Settings::localPlayer.noclipEnabled)
 			Threads::noclipToggle = !Threads::noclipToggle;
 		break;
+	case HotKey::FreeCamToggle:
+		if (Settings::localPlayer.freeCamEnabled)
+			Threads::freeCamToggle = !Threads::freeCamToggle;
+		break;
+	case HotKey::TeleportToFreeCam:
+		ErectusMemory::TeleportToFreeCam();
+		break;
+	case HotKey::SpawnProjectile:
+		if (Settings::projectileSpawner.enabled)
+			Threads::projectileSpawnerToggle = !Threads::projectileSpawnerToggle;
+		break;
 	case HotKey::OpkNpcsToggle:
 		if (Settings::opk.enabled)
 			Threads::opkNpcsToggle = !Threads::opkNpcsToggle;
@@ -165,22 +179,86 @@ void App::OnHotkey(const HotKey hotkey)
 	}
 }
 
+HotkeyCombination App::GetHotkey(const HotKey key) const
+{
+	unsigned vk = 0;
+	switch (key)
+	{
+	case HotKey::PositionSpoofingToggle:
+		vk = Settings::hotkeys.positionSpoofingKey;
+		break;
+	case HotKey::NoclipToggle:
+		vk = Settings::hotkeys.noclipKey;
+		break;
+	case HotKey::FreeCamToggle:
+		vk = Settings::hotkeys.freeCamKey;
+		break;
+	case HotKey::TeleportToFreeCam:
+		vk = Settings::hotkeys.teleportToCamKey;
+		break;
+	case HotKey::SpawnProjectile:
+		vk = Settings::hotkeys.spawnProjectileKey;
+		break;
+	case HotKey::OpkNpcsToggle:
+		vk = Settings::hotkeys.opkKey;
+		break;
+	case HotKey::Loot:
+		vk = Settings::hotkeys.lootKey;
+		break;
+	case HotKey::ToggleOverlay:
+		vk = Settings::hotkeys.toggleOverlayKey;
+		break;
+	}
+	return { MOD_CONTROL | MOD_NOREPEAT, vk };
+}
+
 void App::UnRegisterHotkeys() const
 {
 	if (!appWindow)
 		return;
 
-	for (const auto& [hotkeyId, hotkey] : HOTKEYS)
+	// Unregister all possible hotkeys
+	constexpr HotKey allHotkeys[] = {
+		HotKey::PositionSpoofingToggle,
+		HotKey::NoclipToggle,
+		HotKey::FreeCamToggle,
+		HotKey::TeleportToFreeCam,
+		HotKey::SpawnProjectile,
+		HotKey::OpkNpcsToggle,
+		HotKey::Loot,
+		HotKey::ToggleOverlay
+	};
+
+	for (const auto hotkeyId : allHotkeys)
 	{
 		UnregisterHotKey(appWindow->GetHwnd(), static_cast<int>(hotkeyId));
 	}
 }
+
 void App::RegisterHotkeys() const
 {
-	for (const auto& [hotkeyId, hotkey] : HOTKEYS)
+	constexpr HotKey allHotkeys[] = {
+		HotKey::PositionSpoofingToggle,
+		HotKey::NoclipToggle,
+		HotKey::FreeCamToggle,
+		HotKey::TeleportToFreeCam,
+		HotKey::SpawnProjectile,
+		HotKey::OpkNpcsToggle,
+		HotKey::Loot,
+		HotKey::ToggleOverlay
+	};
+
+	for (const auto hotkeyId : allHotkeys)
 	{
+		const auto hotkey = GetHotkey(hotkeyId);
 		RegisterHotKey(appWindow->GetHwnd(), static_cast<int>(hotkeyId), hotkey.modifiers, hotkey.vk);
 	}
+}
+
+void App::ReRegisterHotkeys()
+{
+	UnRegisterHotkeys();
+	RegisterHotkeys();
 }
 
 void App::ToggleOverlay()
