@@ -1352,59 +1352,71 @@ std::uint32_t ErectusMemory::GetEntityId(const TesObjectRefr& entityData)
 
 bool ErectusMemory::SendHitsToServer(Hits* hitsData, const size_t hitsDataSize)
 {
-	const auto allocSize = sizeof(ExternalFunction) + sizeof(RequestHitsOnActors) + hitsDataSize;
-	const auto allocAddress = ErectusProcess::AllocEx(allocSize);
-	if (allocAddress == 0)
-		return false;
+    const auto allocSize = sizeof(ExternalFunction) + sizeof(RequestHitsOnActors) + hitsDataSize;
+    
+    // Build the payload first
+    const auto pageData = std::make_unique<BYTE[]>(allocSize);
+    memset(pageData.get(), 0x00, allocSize);
 
-	ExternalFunction externalFunctionData;
-	externalFunctionData.address = ErectusProcess::exe + OFFSET_MESSAGE_SENDER;
-	externalFunctionData.rcx = allocAddress + sizeof(ExternalFunction);
-	externalFunctionData.rdx = 0;
-	externalFunctionData.r8 = 0;
-	externalFunctionData.r9 = 0;
+    ExternalFunction externalFunctionData;
+    externalFunctionData.address = ErectusProcess::exe + OFFSET_MESSAGE_SENDER;
+    externalFunctionData.rcx = 0; // Will be patched after we know the address
+    externalFunctionData.rdx = 0;
+    externalFunctionData.r8 = 0;
+    externalFunctionData.r9 = 0;
 
-	const auto pageData = std::make_unique<BYTE[]>(allocSize);
-	memset(pageData.get(), 0x00, allocSize);
+    RequestHitsOnActors requestHitsOnActorsData{};
+    requestHitsOnActorsData.vtable = ErectusProcess::exe + VTABLE_REQUESTHITSONACTORS;
+    // Pointers will be patched after allocation
 
-	RequestHitsOnActors requestHitsOnActorsData{};
-	memset(&requestHitsOnActorsData, 0x00, sizeof(RequestHitsOnActors));
+    memcpy(pageData.get(), &externalFunctionData, sizeof externalFunctionData);
+    memcpy(&pageData[sizeof(ExternalFunction)], &requestHitsOnActorsData, sizeof requestHitsOnActorsData);
+    memcpy(&pageData[sizeof(ExternalFunction) + sizeof(RequestHitsOnActors)], hitsData, hitsDataSize);
 
-	requestHitsOnActorsData.vtable = ErectusProcess::exe + VTABLE_REQUESTHITSONACTORS;
-	requestHitsOnActorsData.hitsArrayPtr = allocAddress + sizeof(ExternalFunction) + sizeof(RequestHitsOnActors);
-	requestHitsOnActorsData.hitsArrayEnd = allocAddress + sizeof(ExternalFunction) + sizeof(RequestHitsOnActors) + hitsDataSize;
+    // Allocate RW
+    const auto allocAddress = ErectusProcess::AllocEx(allocSize);
+    if (!allocAddress)
+        return false;
 
-	memcpy(pageData.get(), &externalFunctionData, sizeof externalFunctionData);
-	memcpy(&pageData[sizeof(ExternalFunction)], &requestHitsOnActorsData, sizeof requestHitsOnActorsData);
-	memcpy(&pageData[sizeof(ExternalFunction) + sizeof(RequestHitsOnActors)], &*hitsData, hitsDataSize);
+    // Patch addresses now that we know the allocation address
+    auto* extFunc = reinterpret_cast<ExternalFunction*>(pageData.get());
+    extFunc->rcx = allocAddress + sizeof(ExternalFunction);
 
-	const auto pageWritten = ErectusProcess::Wpm(allocAddress, pageData.get(), allocSize);
+    auto* reqHits = reinterpret_cast<RequestHitsOnActors*>(&pageData[sizeof(ExternalFunction)]);
+    reqHits->hitsArrayPtr = allocAddress + sizeof(ExternalFunction) + sizeof(RequestHitsOnActors);
+    reqHits->hitsArrayEnd = allocAddress + sizeof(ExternalFunction) + sizeof(RequestHitsOnActors) + hitsDataSize;
 
-	if (!pageWritten)
-	{
-		ErectusProcess::FreeEx(allocAddress);
-		return false;
-	}
+    // Write data (still RW)
+    if (!ErectusProcess::Wpm(allocAddress, pageData.get(), allocSize))
+    {
+        ErectusProcess::FreeEx(allocAddress);
+        return false;
+    }
 
-	const auto paramAddress = allocAddress + sizeof ExternalFunction::ASM;
-	auto* const thread = CreateRemoteThread(ErectusProcess::handle, nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(allocAddress),
-		reinterpret_cast<LPVOID>(paramAddress), 0, nullptr);
+    // Flip to RX (no longer writable, now executable)
+    if (!ErectusProcess::ProtectEx(allocAddress, allocSize))
+    {
+        ErectusProcess::FreeEx(allocAddress);
+        return false;
+    }
 
-	if (thread == nullptr)
-	{
-		ErectusProcess::FreeEx(allocAddress);
-		return false;
-	}
+    // Execute
+    const auto paramAddress = allocAddress + sizeof ExternalFunction::ASM;
+    auto* const thread = CreateRemoteThread(ErectusProcess::handle, nullptr, 0,
+        reinterpret_cast<LPTHREAD_START_ROUTINE>(allocAddress),
+        reinterpret_cast<LPVOID>(paramAddress), 0, nullptr);
 
-	const auto threadResult = WaitForSingleObject(thread, 3000);
-	CloseHandle(thread);
+    if (!thread)
+    {
+        ErectusProcess::FreeEx(allocAddress);
+        return false;
+    }
 
-	if (threadResult == WAIT_TIMEOUT)
-		return false;
+    const auto threadResult = WaitForSingleObject(thread, 3000);
+    CloseHandle(thread);
 
-	ErectusProcess::FreeEx(allocAddress);
-
-	return true;
+    ErectusProcess::FreeEx(allocAddress);
+    return threadResult != WAIT_TIMEOUT;
 }
 
 bool ErectusMemory::SendDamage(const std::uintptr_t targetPtr, const std::uint32_t weaponId, BYTE* shotsHit, BYTE* shotsFired, const BYTE count)
@@ -1744,54 +1756,44 @@ std::unordered_map<int, std::string> ErectusMemory::GetFavoritedWeapons()
 	}
 	return result;
 }
-
 bool ErectusMemory::MeleeAttack()
 {
-	if (!MsgSender::IsEnabled())
-		return false;
+    if (!MsgSender::IsEnabled())
+        return false;
 
-	const auto player = Game::GetLocalPlayer();
-	if (!player.IsIngame())
-		return false;
+    const auto player = Game::GetLocalPlayer();
+    if (!player.IsIngame())
+        return false;
 
-	const auto allocAddress = ErectusProcess::AllocEx(sizeof(ExternalFunction));
-	if (allocAddress == 0)
-		return false;
+    ExternalFunction externalFunctionData = {
+        .address = ErectusProcess::exe + OFFSET_MELEE_ATTACK,
+        .rcx = player.ptr,
+        .rdx = 0,
+        .r8 = 1,
+        .r9 = 0,
+    };
 
-	ExternalFunction externalFunctionData = {
-		.address = ErectusProcess::exe + OFFSET_MELEE_ATTACK,
-		.rcx = player.ptr,
-		.rdx = 0,
-		.r8 = 1,
-		.r9 = 0,
-	};
+    // Use the convenience function: alloc RW → write → protect RX
+    const auto allocAddress = ErectusProcess::AllocWriteProtect(&externalFunctionData, sizeof(ExternalFunction));
+    if (!allocAddress)
+        return false;
 
-	const auto written = ErectusProcess::Wpm(allocAddress, &externalFunctionData, sizeof(ExternalFunction));
+    const auto paramAddress = allocAddress + sizeof ExternalFunction::ASM;
+    auto* const thread = CreateRemoteThread(ErectusProcess::handle, nullptr, 0,
+        reinterpret_cast<LPTHREAD_START_ROUTINE>(allocAddress),
+        reinterpret_cast<LPVOID>(paramAddress), 0, nullptr);
 
-	if (!written)
-	{
-		ErectusProcess::FreeEx(allocAddress);
-		return false;
-	}
+    if (!thread)
+    {
+        ErectusProcess::FreeEx(allocAddress);
+        return false;
+    }
 
-	const auto paramAddress = allocAddress + sizeof ExternalFunction::ASM;
-	auto* const thread = CreateRemoteThread(ErectusProcess::handle, nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(allocAddress),
-		reinterpret_cast<LPVOID>(paramAddress), 0, nullptr);
+    const auto threadResult = WaitForSingleObject(thread, 3000);
+    CloseHandle(thread);
 
-	if (thread == nullptr)
-	{
-		ErectusProcess::FreeEx(allocAddress);
-		return false;
-	}
-
-	const auto threadResult = WaitForSingleObject(thread, 3000);
-	CloseHandle(thread);
-
-	if (threadResult == WAIT_TIMEOUT)
-		return false;
-
-	ErectusProcess::FreeEx(allocAddress);
-	return true;
+    ErectusProcess::FreeEx(allocAddress);
+    return threadResult != WAIT_TIMEOUT;
 }
 
 bool ErectusMemory::ChargenEditing()
@@ -1863,6 +1865,7 @@ bool ErectusMemory::PatchDetectFlag()
 	return ErectusProcess::Wpm(ErectusProcess::exe + OFFSET_FLAGDETECTED, &patch, sizeof patch);
 
 }
+
 
 
 
