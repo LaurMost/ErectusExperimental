@@ -2,6 +2,7 @@
 
 #include "app.h"
 #include "common.h"
+#include "renderer.h"
 #include "settings.h"
 
 #include "ErectusProcess.h"
@@ -13,6 +14,8 @@
 #include "dependencies/imgui/imgui_stdlib.h"
 
 #include "game/Game.h"
+#include "features/ProjectileSpawner.h"
+#include "features/CallFunction.h"
 
 void Gui::Render()
 {
@@ -27,8 +30,11 @@ void Gui::RenderOverlay()
 {
 	const auto camera = Game::GetPlayerCamera();
 
+	ProjectileSpawner::UpdateTrajectory();  // Update trajectory each frame
+
 	RenderEntities(camera);
 	RenderPlayers(camera);
+	RenderTrajectory(camera);  // Draw trajectory arc
 
 	RenderInfoBox();
 }
@@ -392,6 +398,120 @@ void Gui::RenderItems(const CustomEntry& entry, const Camera& camera, const EspS
 	}
 }
 
+void Gui::RenderTrajectory(const Camera& cameraData)
+{
+	if (!Settings::projectileSpawner.enabled)
+		return;
+	
+	if (!ProjectileSpawner::hasValidTrajectory)
+		return;
+	
+	const auto& trajectory = ProjectileSpawner::currentTrajectory;
+	if (trajectory.size() < 2)
+		return;
+	
+	auto* drawList = ImGui::GetBackgroundDrawList();
+	
+	const ImU32 trajectoryColor = IM_COL32(
+		static_cast<int>(Settings::projectileSpawner.trajectoryColor[0] * 255.f),
+		static_cast<int>(Settings::projectileSpawner.trajectoryColor[1] * 255.f),
+		static_cast<int>(Settings::projectileSpawner.trajectoryColor[2] * 255.f),
+		255
+	);
+	
+	const ImU32 impactColor = IM_COL32(
+		static_cast<int>(Settings::projectileSpawner.impactColor[0] * 255.f),
+		static_cast<int>(Settings::projectileSpawner.impactColor[1] * 255.f),
+		static_cast<int>(Settings::projectileSpawner.impactColor[2] * 255.f),
+		255
+	);
+	
+	// Draw trajectory arc
+	if (Settings::projectileSpawner.drawTrajectory)
+	{
+		Vector2 prevScreenPos{};
+		bool prevValid = false;
+		
+		for (const auto& point : trajectory)
+		{
+			const auto screenPos = cameraData.World2Screen(point.position);
+			
+			// Check if point is on screen (World2Screen returns 0,0 for off-screen)
+			const bool currentValid = !(screenPos.x == 0.f && screenPos.y == 0.f);
+			
+			if (prevValid && currentValid)
+			{
+				drawList->AddLine(
+					ImVec2(prevScreenPos.x, prevScreenPos.y),
+					ImVec2(screenPos.x, screenPos.y),
+					trajectoryColor,
+					2.0f
+				);
+			}
+			
+			prevScreenPos = screenPos;
+			prevValid = currentValid;
+		}
+	}
+	
+	// Draw impact marker
+	if (Settings::projectileSpawner.drawImpactMarker)
+	{
+		const auto impactScreenPos = cameraData.World2Screen(ProjectileSpawner::currentImpactPoint);
+		
+		if (!(impactScreenPos.x == 0.f && impactScreenPos.y == 0.f))
+		{
+			const float markerSize = 10.0f;
+			
+			// Draw crosshair
+			drawList->AddLine(
+				ImVec2(impactScreenPos.x - markerSize, impactScreenPos.y),
+				ImVec2(impactScreenPos.x + markerSize, impactScreenPos.y),
+				impactColor,
+				2.0f
+			);
+			drawList->AddLine(
+				ImVec2(impactScreenPos.x, impactScreenPos.y - markerSize),
+				ImVec2(impactScreenPos.x, impactScreenPos.y + markerSize),
+				impactColor,
+				2.0f
+			);
+			
+			// Draw circle
+			drawList->AddCircle(
+				ImVec2(impactScreenPos.x, impactScreenPos.y),
+				markerSize,
+				impactColor,
+				12,
+				2.0f
+			);
+			
+			// Draw distance and travel time text
+			std::string infoText;
+			if (Settings::projectileSpawner.showDistance && Settings::projectileSpawner.showTravelTime)
+			{
+				infoText = format(FMT_STRING("{:.0f}m | {:.2f}s"), 
+					ProjectileSpawner::currentDistance * 0.01f, 
+					ProjectileSpawner::currentTravelTime);
+			}
+			else if (Settings::projectileSpawner.showDistance)
+			{
+				infoText = format(FMT_STRING("{:.0f}m"), ProjectileSpawner::currentDistance * 0.01f);
+			}
+			else if (Settings::projectileSpawner.showTravelTime)
+			{
+				infoText = format(FMT_STRING("{:.2f}s"), ProjectileSpawner::currentTravelTime);
+			}
+			
+			if (!infoText.empty())
+			{
+				const Vector2 textPos(impactScreenPos.x, impactScreenPos.y + markerSize + 5.0f);
+				RenderText(infoText.c_str(), textPos, impactColor);
+			}
+		}
+	}
+}
+
 void Gui::RenderInfoBox()
 {
 	std::vector<std::pair<std::string, bool>> infoTexts = {};
@@ -479,8 +599,43 @@ void Gui::RenderInfoBox()
 
 void Gui::MenuBar()
 {
+	// Static variables for window dragging
+	static bool isDragging = false;
+	static POINT dragStartPos = {};
+
 	if (ImGui::BeginMenuBar())
 	{
+		// Allow dragging the window from the menu bar (for borderless window)
+		if (gApp->GetMode() == App::Mode::Standalone)
+		{
+			if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+			{
+				POINT cursorPos;
+				GetCursorPos(&cursorPos);
+
+				if (!isDragging)
+				{
+					isDragging = true;
+					dragStartPos = cursorPos;
+				}
+				else
+				{
+					int deltaX = cursorPos.x - dragStartPos.x;
+					int deltaY = cursorPos.y - dragStartPos.y;
+
+					RECT windowRect;
+					GetWindowRect(gApp->appWindow->GetHwnd(), &windowRect);
+					gApp->appWindow->SetPosition(windowRect.left + deltaX, windowRect.top + deltaY);
+
+					dragStartPos = cursorPos;
+				}
+			}
+			else
+			{
+				isDragging = false;
+			}
+		}
+
 		if (ImGui::MenuItem("Exit"))
 			gApp->Shutdown();
 
@@ -544,7 +699,7 @@ void Gui::Menu()
 }
 void Gui::ProcessMenu()
 {
-	ImGui::SetWindowSize(ImVec2(384, 224));
+	ImGui::SetWindowSize(ImVec2(384, 384));
 
 	ImGui::SetNextItemWidth(-16.f);
 	auto processText = ErectusProcess::pid ? "Fallout76.exe - " + std::to_string(ErectusProcess::pid) : "No process selected.";
@@ -562,20 +717,27 @@ void Gui::ProcessMenu()
 
 	ImGui::Separator();
 
-	switch (ErectusProcess::processErrorId)
+	if (ErectusProcess::processError.empty())
 	{
-	case 0:
-		ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
-		break;
-	case 1:
-		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
-		break;
-	case 2:
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
-		break;
-	default:
-		ImGui::Text(ErectusProcess::processError.c_str());
-		break;
+		ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Select a process to attach");
+	}
+	else
+	{
+		switch (ErectusProcess::processErrorId)
+		{
+		case 0:
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
+			break;
+		case 1:
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
+			break;
+		case 2:
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), ErectusProcess::processError.c_str());
+			break;
+		default:
+			ImGui::Text(ErectusProcess::processError.c_str());
+			break;
+		}
 	}
 
 	ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -612,24 +774,34 @@ void Gui::ProcessMenu()
 	ImGui::Columns(1);
 	ImGui::Separator();
 	ImGui::PopItemFlag();
+
+	ImGui::Spacing();
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Made by xEvolve");
+	ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Game Version: 1.7.23.11");
+	ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Use at your own risk");
 }
 
 void Gui::ButtonToggle(const char* label, bool& state)
 {
+	const auto& onColor = Settings::menuStyle.toggleOnColor;
+	const auto& offColor = Settings::menuStyle.toggleOffColor;
+
 	if (state)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 1.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 1.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 1.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x / 2, 0)))
 			state = false;
 		ImGui::PopStyleColor(3);
 	}
 	else
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 0.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x / 2, 0.0f)))
 			state = true;
 		ImGui::PopStyleColor(3);
@@ -638,20 +810,23 @@ void Gui::ButtonToggle(const char* label, bool& state)
 
 void Gui::LargeButtonToggle(const char* label, bool& state)
 {
+	const auto& onColor = Settings::menuStyle.toggleOnColor;
+	const auto& offColor = Settings::menuStyle.toggleOffColor;
+
 	if (state)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 1.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 1.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 1.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(-FLT_MIN, 0)))
 			state = false;
 		ImGui::PopStyleColor(3);
 	}
 	else
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 0.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(-FLT_MIN, 0)))
 			state = true;
 		ImGui::PopStyleColor(3);
@@ -660,20 +835,23 @@ void Gui::LargeButtonToggle(const char* label, bool& state)
 
 void Gui::SmallButtonToggle(const char* label, bool& state)
 {
+	const auto& onColor = Settings::menuStyle.toggleOnColor;
+	const auto& offColor = Settings::menuStyle.toggleOffColor;
+
 	if (state)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 1.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 1.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 1.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(onColor[0], onColor[1], onColor[2], onColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(110.0f, 0.0f)))
 			state = false;
 		ImGui::PopStyleColor(3);
 	}
 	else
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.0f, 0.0f, 0.3f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.0f, 0.0f, 0.4f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 0.0f, 0.0f, 0.5f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3]));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.1f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(offColor[0], offColor[1], offColor[2], offColor[3] + 0.2f));
 		if (ImGui::Button(label, ImVec2(110.0f, 0.0f)))
 			state = true;
 		ImGui::PopStyleColor(3);
@@ -1322,7 +1500,45 @@ void Gui::OverlayMenuTabCombat()
 		}
 
 		if (ImGui::CollapsingHeader("One Position Kill"))
-			LargeButtonToggle("OPK (Keybind: CTRL+N)", Settings::opk.enabled);
+		{
+			ButtonToggle("OPK NPCs", Settings::opk.enabled);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::SliderFloat("###OpkMoveDistance", &Settings::opk.moveDistance, 0.5f, 20.0f, "Move Distance: %.1f");
+		}
+
+		if (ImGui::CollapsingHeader("Projectile Spawn Settings"))
+		{
+			LargeButtonToggle("Spawn Projectiles", Settings::projectileSpawner.enabled);
+
+			const char* weaponNames[] = { "Fatman (Mini Nuke)", "Auto Grenade Launcher", "M79 Grenade Launcher" };
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::Combo("###WeaponSelect", &Settings::projectileSpawner.selectedWeapon, weaponNames, IM_ARRAYSIZE(weaponNames));
+
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+			ImGui::SliderFloat("###HeadHeightOffset", &Settings::projectileSpawner.headHeightOffset, 0.0f, 150.0f, "Spawn Height Offset: %.0f");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+			ImGui::SliderInt("###TrajectorySegments", &Settings::projectileSpawner.trajectorySegments, 10, 50, "Arc Segments: %d");
+
+
+			ButtonToggle("Draw Trajectory", Settings::projectileSpawner.drawTrajectory);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::ColorEdit3("###TrajColor", Settings::projectileSpawner.trajectoryColor);
+
+			ButtonToggle("Draw Impact Marker", Settings::projectileSpawner.drawImpactMarker);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::ColorEdit3("###ImpactColor", Settings::projectileSpawner.impactColor);
+
+			ButtonToggle("Show Distance", Settings::projectileSpawner.showDistance);
+			ImGui::SameLine();
+			LargeButtonToggle("Show Travel Time", Settings::projectileSpawner.showTravelTime);
+
+
+			
+		}
 
 		ImGui::EndTabItem();
 	}
@@ -1336,25 +1552,35 @@ void Gui::OverlayMenuTabPlayer()
 		{
 			ImGui::Columns(2, nullptr, false);
 
-			LargeButtonToggle("Height Spoofing (CTRL+L)##LocalPlayerPositionSpoofingEnabled", Settings::localPlayer.positionSpoofingEnabled);
+			LargeButtonToggle("Height Spoofing##LocalPlayerPositionSpoofingEnabled", Settings::localPlayer.positionSpoofingEnabled);
 			ImGui::NextColumn();
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			ImGui::SliderInt("###LocalPlayerPositionSpoofingHeight", &Settings::localPlayer.positionSpoofingHeight, -524287, 524287, "Spoofed Height: %d");
 			ImGui::NextColumn();
 
-			LargeButtonToggle("Noclip (CTRL+Y)###NoclipEnabled", Settings::localPlayer.noclipEnabled);
+			LargeButtonToggle("Noclip###NoclipEnabled", Settings::localPlayer.noclipEnabled);
 			ImGui::NextColumn();
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			ImGui::SliderFloat("###NoclipSpeed", &Settings::localPlayer.noclipSpeed, 0.0f, 1.0f, "Speed: %.5f");
 			ImGui::NextColumn();
 
+			LargeButtonToggle("Free Camera###FreeCamEnabled", Settings::localPlayer.freeCamEnabled);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::SliderFloat("###FreeCamSpeed", &Settings::localPlayer.freeCamSpeed, 1.0f, 100.0f, "Speed: %.1f");
+			if (ImGui::IsItemDeactivatedAfterEdit())
+				ErectusMemory::SetFreeCamSpeed(Settings::localPlayer.freeCamSpeed);
+			ImGui::NextColumn();
+
+			if (ImGui::Button("Teleport to Camera###TeleportToFreeCam", ImVec2(-FLT_MIN, 0)))
+				ErectusMemory::TeleportToFreeCam();
+			ImGui::NextColumn();
+			LargeButtonToggle("Freeze Action Points###LocalPlayerFreezeApEnabled", Settings::localPlayer.freezeApEnabled);
+			ImGui::NextColumn();
+
 			LargeButtonToggle("Client State", Settings::localPlayer.clientState);
 			ImGui::NextColumn();
 			LargeButtonToggle("Automatic Client State", Settings::localPlayer.automaticClientState);
-			ImGui::NextColumn();
-
-			LargeButtonToggle("Freeze Action Points###LocalPlayerFreezeApEnabled", Settings::localPlayer.freezeApEnabled);
-			ImGui::NextColumn();
 			ImGui::NextColumn();
 
 			LargeButtonToggle("Action Points###LocalPlayerAPEnabled", Settings::localPlayer.actionPointsEnabled);
@@ -1418,6 +1644,28 @@ void Gui::OverlayMenuTabPlayer()
 
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			ImGui::SliderFloat("###ChargenLarge", &Settings::characterEditor.large, 0.0f, 1.0f, "Character Appearance (Large): %f");
+		}
+
+		if (ImGui::CollapsingHeader("Script Functions"))
+		{
+			ImGui::Columns(2, nullptr, false);
+
+			if (ImGui::Button("Apply Spell###ApplyCombatSpell", ImVec2(-FLT_MIN, 0)))
+				CallFunction::ApplyCombatSpell(Settings::callFunction.combatSpellFormId);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::InputScalar("###CombatSpellFormId", ImGuiDataType_U32, &Settings::callFunction.combatSpellFormId,
+				nullptr, nullptr, "%08lX", ImGuiInputTextFlags_CharsHexadecimal);
+			ImGui::NextColumn();
+
+			if (ImGui::Button("Apply Idle Animation###PlayIdleWithTarget", ImVec2(-FLT_MIN, 0)))
+				CallFunction::PlayIdleWithTarget(Settings::callFunction.idleFormId);
+			ImGui::NextColumn();
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			ImGui::InputScalar("###IdleFormId", ImGuiDataType_U32, &Settings::callFunction.idleFormId,
+				nullptr, nullptr, "%08lX", ImGuiInputTextFlags_CharsHexadecimal);
+
+			ImGui::Columns();
 		}
 		ImGui::EndTabItem();
 	}
@@ -1724,6 +1972,12 @@ void Gui::OverlayMenuTabUtilities()
 			text = format(FMT_STRING("{} - Charlie"), fmt::join(ErectusMemory::charlieCode, " "));
 			ImGui::Text(text.c_str());
 		}
+
+		if (ImGui::CollapsingHeader("Message Writer"))
+		{
+			LargeButtonToggle("Message Sender Enabled", Settings::msgWriter.enabled);
+		}
+
 		ImGui::EndTabItem();
 	}
 }
@@ -1841,11 +2095,93 @@ void Gui::OverlayMenuTabTeleporter()
 	}
 }
 
-void Gui::OverlayMenuTabBitMsgWriter()
+void Gui::RenderHotkeyDropdown(const char* label, unsigned& keyCode)
 {
-	if (ImGui::BeginTabItem("BitMsgWriter###BitMsgWriterTab"))
+	static const char* keyNames[] = {
+		"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+		"N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+		"F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+		"Enter", "Space", "Tab"
+	};
+	static const unsigned keyCodes[] = {
+		'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+		'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+		VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12,
+		VK_RETURN, VK_SPACE, VK_TAB
+	};
+
+	int currentIndex = 0;
+	for (int i = 0; i < IM_ARRAYSIZE(keyCodes); i++)
 	{
-		LargeButtonToggle("Message Sender Enabled", Settings::msgWriter.enabled);
+		if (keyCodes[i] == keyCode)
+		{
+			currentIndex = i;
+			break;
+		}
+	}
+
+	ImGui::Text("%s:", label);
+	ImGui::SameLine(180);
+	ImGui::SetNextItemWidth(120);
+
+	auto comboLabel = format(FMT_STRING("CTRL+{}###{}"), keyNames[currentIndex], label);
+
+	if (ImGui::BeginCombo(comboLabel.c_str(), keyNames[currentIndex]))
+	{
+		for (int i = 0; i < IM_ARRAYSIZE(keyNames); i++)
+		{
+			if (ImGui::Selectable(keyNames[i], currentIndex == i))
+				keyCode = keyCodes[i];
+		}
+		ImGui::EndCombo();
+	}
+}
+
+void Gui::OverlayMenuTabSettings()
+{
+	if (ImGui::BeginTabItem("Settings###SettingsTab"))
+	{
+		// === APPEARANCE SECTION ===
+		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::ColorEdit4("Window Background", Settings::menuStyle.windowBg);
+			ImGui::ColorEdit4("Frame Background", Settings::menuStyle.frameBg);
+			ImGui::ColorEdit4("Toggle On", Settings::menuStyle.toggleOnColor);
+			ImGui::ColorEdit4("Toggle Off", Settings::menuStyle.toggleOffColor);
+
+			ImGui::SliderFloat("Window Rounding", &Settings::menuStyle.windowRounding, 0.0f, 12.0f);
+			ImGui::SliderFloat("Frame Rounding", &Settings::menuStyle.frameRounding, 0.0f, 12.0f);
+			ImGui::SliderFloat("Frame Border", &Settings::menuStyle.frameBorderSize, 0.0f, 2.0f);
+			ImGui::SliderFloat("Item Spacing", &Settings::menuStyle.itemSpacing, 0.0f, 20.0f);
+
+			if (ImGui::Button("Apply Style"))
+				Renderer::ApplyStyle();
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Default"))
+			{
+				Settings::menuStyle = MenuStyleSettings{};
+				Renderer::ApplyStyle();
+			}
+		}
+
+		// === HOTKEYS SECTION ===
+		if (ImGui::CollapsingHeader("Hotkeys"))
+		{
+			RenderHotkeyDropdown("Position Spoofing", Settings::hotkeys.positionSpoofingKey);
+			RenderHotkeyDropdown("Noclip", Settings::hotkeys.noclipKey);
+			RenderHotkeyDropdown("Free Camera", Settings::hotkeys.freeCamKey);
+			RenderHotkeyDropdown("Teleport to Camera", Settings::hotkeys.teleportToCamKey);
+			RenderHotkeyDropdown("OPK", Settings::hotkeys.opkKey);
+			RenderHotkeyDropdown("Loot", Settings::hotkeys.lootKey);
+			RenderHotkeyDropdown("Spawn Projectile", Settings::hotkeys.spawnProjectileKey);
+			RenderHotkeyDropdown("Toggle Overlay", Settings::hotkeys.toggleOverlayKey);
+
+			ImGui::Spacing();
+			if (ImGui::Button("Apply Hotkeys"))
+				gApp->ReRegisterHotkeys();
+		}
 
 		ImGui::EndTabItem();
 	}
@@ -1863,7 +2199,7 @@ void Gui::SettingsMenu()
 		OverlayMenuTabPlayer();
 		OverlayMenuTabUtilities();
 		OverlayMenuTabTeleporter();
-		OverlayMenuTabBitMsgWriter();
+		OverlayMenuTabSettings();
 
 		ImGui::EndTabBar();
 	}
