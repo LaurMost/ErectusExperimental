@@ -28,7 +28,8 @@ private:
 	static void OverlayMenuTabPlayer();
 	static void OverlayMenuTabUtilities();
 	static void OverlayMenuTabTeleporter();
-	static void OverlayMenuTabBitMsgWriter();
+	static void OverlayMenuTabSettings();
+	static void RenderHotkeyDropdown(const char* label, unsigned& keyCode);
 
 	static void MenuBar();
 	static void Menu();
@@ -41,6 +42,7 @@ private:
 
 	static void RenderActors(const CustomEntry& entry, const Camera& camera, const EspSettings::Actors& settings);
 	static void RenderItems(const CustomEntry& entry, const Camera& camera, const EspSettings::Items& settings);
+	static void RenderTrajectory(const Camera& cameraData);
 
 	static void RenderText(const char* text, const Vector2& position, ImU32 color);
 

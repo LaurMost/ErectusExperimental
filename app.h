@@ -33,6 +33,9 @@ public:
 
 	[[nodiscard]] Vector2 GetWindowSize() const { return currentWindowSize; }
 
+	void ReRegisterHotkeys();
+	[[nodiscard]] HotkeyCombination GetHotkey(HotKey key) const;
+
 private:
 	void SetMode(Mode newMode);
 

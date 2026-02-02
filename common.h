@@ -48,6 +48,11 @@ constexpr auto SIZE_OPK = 0x0FUL;  // OPK patch size
 //noclip
 constexpr auto OFFSET_CHAR_CONTROLLER = 0x6288AB0UL;// Patch 1.7.23.11
 
+//freecam (tfc) - offsets need updating for 1.7.23.11
+constexpr auto OFFSET_TFC = 0x01CC6CB0UL;                    // ToggleFreeCam function
+constexpr auto OFFSET_TFC_CAMERA_PTR = 0x0586F598UL;         // PlayerCamera pointer
+constexpr auto OFFSET_TFC_TRANSLATION_SPEED = 0x054F1580UL;  // Camera translation speed
+
 //weapon editor
 constexpr auto OFFSET_DATA_HANDLER = 0x5E09B10UL; // Patch 1.7.23.11
 constexpr auto OFFSET_INFINITE_AMMO = 0x00F0C410UL; // Patch 1.7.23.11 48 83 EC 38 48 8D 44 24 50 C7 44 24 50 00 00 00 00
@@ -61,6 +66,11 @@ constexpr auto SIZE_FAKE_MESSAGE = 0x02UL;  // FakeMessage patch size
 constexpr auto OFFSET_FAKE_MESSAGE_EX = 0x17FF431UL; // 1.7.23.11
 constexpr auto SIZE_FAKE_MESSAGE_EX = 0x02UL;  // FakeMessageEx patch size
 
+// Script Function Calling (TODO: Update offsets for 1.7.23.11)
+constexpr auto OFFSET_SCRIPT_CALLFUNCTION = 0x00000000UL;        // Placeholder - needs 1.7.23.11 offset
+constexpr auto OFFSET_SCRIPT_CALLFUNCTIONFORMAT = 0x00000000UL;  // Placeholder - needs 1.7.23.11 offset
+constexpr auto OFFSET_SCRIPT_INITIALIZESCRIPT = 0x00000000UL;    // Placeholder - needs 1.7.23.11 offset
+constexpr auto SIZE_SCRIPT = 0x88UL;
 
 //vtables
 constexpr auto VTABLE_REQUESTACTIVATEREFMSG = 0x448C758UL;// Patch 1.7.23.11
@@ -75,6 +85,9 @@ enum class HotKey : int
 {
 	PositionSpoofingToggle,
 	NoclipToggle,
+	FreeCamToggle,
+	TeleportToFreeCam,
+	SpawnProjectile,
 	OpkNpcsToggle,
 	Loot,
 	ToggleOverlay,
@@ -84,14 +97,6 @@ struct HotkeyCombination
 {
 	unsigned modifiers;
 	unsigned vk;
-};
-
-const std::unordered_map<HotKey, HotkeyCombination> HOTKEYS{
-	{ HotKey::PositionSpoofingToggle, HotkeyCombination{MOD_CONTROL | MOD_NOREPEAT, 'L' } },
-	{ HotKey::NoclipToggle, HotkeyCombination{ MOD_CONTROL | MOD_NOREPEAT, 'Y' } },
-	{ HotKey::OpkNpcsToggle, HotkeyCombination{ MOD_CONTROL | MOD_NOREPEAT, 'N' } },
-	{ HotKey::Loot, HotkeyCombination{ MOD_CONTROL | MOD_NOREPEAT, 'R' } },
-	{ HotKey::ToggleOverlay, HotkeyCombination{ MOD_CONTROL | MOD_NOREPEAT, VK_RETURN } }
 };
 
 const std::unordered_map<std::uint32_t, std::string> JUNK_COMPONENT_NAMES = {
