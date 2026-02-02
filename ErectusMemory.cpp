@@ -1052,6 +1052,85 @@ void ErectusMemory::Noclip(const bool enabled)
     }
 }
 
+void ErectusMemory::FreeCam(const bool enabled)
+{
+    static bool freeCamActive = false;
+    
+    // Only toggle when state changes
+    if (enabled == freeCamActive)
+        return;
+    
+    // Read PlayerCamera pointer
+    std::uintptr_t playerCameraPtr = 0;
+    if (!ErectusProcess::Rpm(ErectusProcess::exe + OFFSET_TFC_CAMERA_PTR, &playerCameraPtr, sizeof playerCameraPtr))
+        return;
+    
+    if (!Utils::Valid(playerCameraPtr))
+        return;
+    
+    // Set up function call using ExternalFunction pattern (same as MeleeAttack)
+    ExternalFunction externalFunctionData = {
+        .address = ErectusProcess::exe + OFFSET_TFC,
+        .rcx = playerCameraPtr,  // PlayerCamera* camptr
+        .rdx = 0,                // freezeEnvironment = false
+        .r8 = 0,
+        .r9 = 0,
+    };
+    
+    // Use stealth allocation: alloc RW → write → protect RX
+    const auto allocAddress = ErectusProcess::AllocWriteProtect(&externalFunctionData, sizeof(ExternalFunction));
+    if (!allocAddress)
+        return;
+    
+    // Parameter address is after the ASM shellcode
+    const auto paramAddress = allocAddress + sizeof ExternalFunction::ASM;
+    auto* const thread = CreateRemoteThread(ErectusProcess::handle, nullptr, 0,
+        reinterpret_cast<LPTHREAD_START_ROUTINE>(allocAddress),
+        reinterpret_cast<LPVOID>(paramAddress), 0, nullptr);
+    
+    if (!thread)
+    {
+        ErectusProcess::FreeEx(allocAddress);
+        return;
+    }
+    
+    const auto threadResult = WaitForSingleObject(thread, 3000);
+    CloseHandle(thread);
+    
+    ErectusProcess::FreeEx(allocAddress);
+    
+    if (threadResult != WAIT_TIMEOUT)
+        freeCamActive = enabled;
+}
+
+bool ErectusMemory::SetFreeCamSpeed(const float speed)
+{
+    return ErectusProcess::Wpm(
+        ErectusProcess::exe + OFFSET_TFC_TRANSLATION_SPEED,
+        &speed,
+        sizeof speed
+    );
+}
+
+bool ErectusMemory::TeleportToFreeCam()
+{
+    const auto player = Game::GetLocalPlayer();
+    if (!player.IsIngame())
+        return false;
+    
+    const auto camera = Game::GetPlayerCamera();
+    
+    RequestTeleportMessage requestTeleportMessageData =
+    {
+        .vtable = ErectusProcess::exe + VTABLE_REQUESTTELEPORTTOLOCATIONMSG,
+        .position = camera.origin,
+        .rotation = { 0.0f, 0.0f, 0.0f },
+        .cellPtr = 0,
+        .unk = 1
+    };
+    
+    return MsgSender::Send(&requestTeleportMessageData, sizeof requestTeleportMessageData);
+}
 
 bool ErectusMemory::ReferenceSwap(std::uint32_t& sourceFormId, std::uint32_t& destinationFormId)
 {

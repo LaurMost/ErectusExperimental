@@ -437,6 +437,11 @@ public:
 	static bool SetClientState(std::uintptr_t clientState);
 	static void Noclip(bool enabled);
 
+	//freecam
+	static void FreeCam(bool enabled);
+	static bool SetFreeCamSpeed(float speed);
+	static bool TeleportToFreeCam();
+
 	//item transfer
 	static bool CheckItemTransferList();
 	static bool TransferItems(std::uint32_t sourceFormId, std::uint32_t destinationFormId);
