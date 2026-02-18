@@ -307,31 +307,205 @@ constexpr auto CUSTOM_ENTRY_INVALID = 0x8000000000000000ULL;
 
 enum class FormType : std::uint8_t
 {
-	BgsTextureSet = 0x12,         // TXST
-	TesSound = 0x1B,              // SOUN
-	BgsAcousticSpace = 0x1D,      // ASPC
-	TesObjectArmo = 0x28,         // ARMO
-	TesObjectBook = 0x29,         // BOOK
-	TesObjectCont = 0x2A,         // CONT
-	TesObjectLigh = 0x2D,         // LIGH
-	TesObjectMisc = 0x2E,         // MISC
-	CurrencyObject = 0x31,        // CNCY
-	TesObjectStat = 0x32,         // STAT
-	BgsStaticCollection = 0x33,   // SCOL
-	BgsMovableStatic = 0x34,      // MSTT
-	TesFlora = 0x37,              // FLOR
-	TesObjectWeap = 0x39,         // WEAP
-	TesAmmo = 0x3A,               // AMMO
-	TesNpc = 0x3B,                // NPC_
-	TesKey = 0x3E,                // KEYM
-	AlchemyItem = 0x3F,           // ALCH
-	TesUtilityItem = 0x40,        // UTIL
-	BgsIdleMarker = 0x41,         // IDLM
-	BgsNote = 0x42,               // NOTE
-	BgsBendableSpline = 0x45,     // BNDS
-	TesLevItem = 0x4A,            // LVLI
-	TesObjectRefr = 0x52,         // REFR
-	TesActor = 0x53,              // ACHR
-	PlayerCharacter = 0xB7,       // PLYR
-	Undefined = UINT8_MAX,
+    NONE = 0x00,
+    UNK1 = 0x01, // new in 1.7.23.16 (inserted, shifted all below by +1)
+    TES4 = 0x02,
+    GRUP = 0x03,
+    GMST = 0x04,
+    KYWD = 0x05,
+    ENTM = 0x06,
+    COEN = 0x07,
+    CSEN = 0x08,
+    ECAT = 0x09,
+    EMOT = 0x0A,
+    AVTR = 0x0B,
+    CPRD = 0x0C,
+    ASTM = 0x0D,
+    ATXO = 0x0E,
+    LCRT = 0x0F,
+    AACT = 0x10,
+    TRNS = 0x11,
+    CMPO = 0x12,
+    BgsTextureSet = 0x13, // [V] BGSTextureSet = 19
+    MICN = 0x14,
+    GLOB = 0x15,
+    DMGT = 0x16,
+    CLAS = 0x17,
+    FACT = 0x18,
+    HDPT = 0x19,
+    EYES = 0x1A,
+    RACE = 0x1B,
+    TesSound = 0x1C, // [V] TESSound = 28
+    SECH = 0x1D,
+    BgsAcousticSpace = 0x1E, // [V] BGSAcousticSpace = 30
+    RESO = 0x1F,
+    MGEF = 0x20,
+    SCPT = 0x21,
+    LTEX = 0x22,
+    ENCH = 0x23,
+    SPEL = 0x24,
+    SCRL = 0x25,
+    TesObjectACTI = 0x26, // [V] TESObjectACTI = 38
+    TACT = 0x27,
+    CURV = 0x28,
+    UNK2 = 0x29, // new in 1.7.23.16 (inserted, shifted ARMO+ by additional +1)
+    TesObjectARMO = 0x2A, // [V] TESObjectARMO = 42
+    TesObjectBOOK = 0x2B,
+    TesObjectCONT = 0x2C, // [V] TESObjectCONT = 44
+    TesObjectDOOR = 0x2D, // [V] TESObjectDOOR = 45
+    TesObjectINGR = 0x2E,
+    TesObjectLIGH = 0x2F, // [V] TESObjectLIGH = 47
+    TesObjectMISC = 0x30, // [V] TESObjectMISC = 48
+    MSCS = 0x31,
+    MISI = 0x32,
+    CurrencyObject = 0x33,
+    TesObjectStat = 0x34, // [V] TESObjectStat = 52
+    BgsStaticCollection = 0x35, // [V] BGSStaticCollection = 53
+    BgsMovableStatic = 0x36, // [V] BGSMovableStatic = 54
+    GRAS = 0x37,
+    TREE = 0x38,
+    TesFlora = 0x39, // [V] TESFlora = 57
+    TesFurniture = 0x3A, // [V] TESFurniture = 58
+    TesObjectWEAP = 0x3B, // [V] TESObjectWEAP = 59
+    TesAmmo = 0x3C, // [V] TESAmmo = 60
+    TesNPC = 0x3D, // [V] TESNPC = 61
+    LVLN = 0x3E,
+    LVLP = 0x3F,
+    TesKey = 0x40, // [V] TESKey = 64
+    AlchemyItem = 0x41, // [V] AlchemyItem = 65
+    TesUtilityItem = 0x42, // [V] TESUtilityItem = 66
+    BgsIdleMarker = 0x43, // [V] BGSIdleMarker = 67
+    BgsNote = 0x44, // [V] BGSNote = 68
+    BgsProjectile = 0x45, // [V] BGSProjectile = 69
+    BgsHazard = 0x46, // [V] BGSHazard = 70
+    BgsBendableSpline = 0x47, // [V] BGSBendableSpline = 71
+    SLGM = 0x48,
+    TERM = 0x49,
+    PPAK = 0x4A,
+    PACH = 0x4B,
+    TesLevItem = 0x4C, // [V] TESLevItem = 76
+    WTHR = 0x4D,
+    CLMT = 0x4E,
+    SPGD = 0x4F,
+    RFCT = 0x50,
+    REGN = 0x51,
+    NAVI = 0x52,
+    TesObjectCELL = 0x53, // [V] via probe +0xA8 (83)
+    TesObjectREFR = 0x54,
+    TesActor = 0x55,
+    PMIS = 0x56,
+    PARW = 0x57,
+    PGRE = 0x58,
+    PBEA = 0x59,
+    PFLA = 0x5A,
+    PCON = 0x5B,
+    PBAR = 0x5C,
+    PHZD = 0x5D,
+    TesWorldSpace = 0x5E,
+    LAND = 0x5F,
+    NAVM = 0x60,
+    TLOD = 0x61,
+    DIAL = 0x62,
+    INFO = 0x63,
+    QUST = 0x64,
+    IDLE = 0x65,
+    PACK = 0x66,
+    CSTY = 0x67,
+    LSCR = 0x68,
+    LVSP = 0x69,
+    ANIO = 0x6A,
+    WATR = 0x6B,
+    EFSH = 0x6C,
+    TOFT = 0x6D,
+    EXPL = 0x6E,
+    DEBR = 0x6F,
+    IMGS = 0x70,
+    IMAD = 0x71,
+    FLST = 0x72,
+    PERK = 0x73,
+    PCRD = 0x74,
+    LVPC = 0x75,
+    BPTD = 0x76,
+    ADDN = 0x77,
+    AVIF = 0x78,
+    CAMS = 0x79,
+    CPTH = 0x7A,
+    VTYP = 0x7B,
+    MATT = 0x7C,
+    IPCT = 0x7D,
+    IPDS = 0x7E,
+    ARMA = 0x7F,
+    LCTN = 0x80,
+    MESG = 0x81,
+    RGDL = 0x82,
+    DOBJ = 0x83,
+    DFOB = 0x84,
+    LGTM = 0x85,
+    MUSC = 0x86,
+    FSTP = 0x87,
+    FSTS = 0x88,
+    SMBN = 0x89,
+    SMQN = 0x8A,
+    SMEN = 0x8B,
+    DLBR = 0x8C,
+    MUST = 0x8D,
+    DLVW = 0x8E,
+    WOOP = 0x8F,
+    SHOU = 0x90,
+    EQUP = 0x91,
+    RELA = 0x92,
+    SCEN = 0x93,
+    ASTP = 0x94,
+    OTFT = 0x95,
+    ARTO = 0x96,
+    MATO = 0x97,
+    MOVT = 0x98,
+    SNDR = 0x99,
+    DUAL = 0x9A,
+    SNCT = 0x9B,
+    SOPM = 0x9C,
+    COLL = 0x9D,
+    CLFM = 0x9E,
+    REVB = 0x9F,
+    PKIN = 0xA0,
+    RFGP = 0xA1,
+    AMDL = 0xA2,
+    AAMD = 0xA3,
+    LAYR = 0xA4,
+    COBJ = 0xA5,
+    OMOD = 0xA6,
+    MSWP = 0xA7,
+    MDSP = 0xA8,
+    ZOOM = 0xA9,
+    INNR = 0xAA,
+    KSSM = 0xAB,
+    AECH = 0xAC,
+    SCCO = 0xAD,
+    AORU = 0xAE,
+    SCSN = 0xAF,
+    STAG = 0xB0,
+    NOCM = 0xB1,
+    LENS = 0xB2,
+    LSPR = 0xB3,
+    OVIS = 0xB4,
+    DLYR = 0xB5,
+    STND = 0xB6,
+    STMP = 0xB7,
+    GCVR = 0xB8,
+    PlayerCharacter = 0xB9,
+    STHD = 0xBA,
+    VOLI = 0xBB,
+    WSPR = 0xBC,
+    WAVE = 0xBD,
+    AAPD = 0xBE,
+    PMFT = 0xBF,
+    CHAL = 0xC0,
+    CNDF = 0xC1,
+    AUVF = 0xC2,
+    LGDI = 0xC3,
+    EQWG = 0xC4,
+    PEPF = 0xC5,
+    GMRW = 0xC6,
+    DCGF = 0xC7,
+    QMDL = 0xC8,
 };
