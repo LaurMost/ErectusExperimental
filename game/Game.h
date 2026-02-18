@@ -11,9 +11,7 @@ public:
 	static Camera GetPlayerCamera();
 
 private:
-	static LoadedAreaManager GetLoadedAreaManager();
-	static TesObjectCell GetSkyCell();
-	
+	static LoadedAreaManager GetLoadedAreaManager();	
 	virtual void Dummy() = 0;
 };
 
