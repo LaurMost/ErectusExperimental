@@ -113,17 +113,18 @@ public:
 	char padding0098[0x10];
 	std::uintptr_t cellPtr; //0xA8
 	std::uintptr_t skeletonPtr; //0xB0
-	std::uintptr_t baseObjectPtr; //0xB8
-	char padding00C0[0xE];
+	char padding00B8[0x8]; //0xB8
+	std::uintptr_t baseObjectPtr; //0xC0
+	char padding00C8[0x6]; //0xC8 (fixed: was 0x2, spawnFlag is at 0xCE)
 	char spawnFlag; //0xCE
-	char padding00Cf[0xD9];
+	char padding00CF[0xD9]; //0xCF
 	char movementFlag; //0x1A8
 	char sprintFlag; //0x1A9
 	char healthFlag; //0x1AA
-	char padding019B[0xAA9];
+	char padding01AB[0xAA9]; //0x1AB (fixed: was named padding019B)
 	std::uint32_t playerStashFormId; //0xC54
 	char padding0C58[0x140];
-	std::uintptr_t playerKnownRecipes;
+	std::uintptr_t playerKnownRecipes; //0xD98
 
 	std::uintptr_t ptr; //not really there, fill it manually
 };
