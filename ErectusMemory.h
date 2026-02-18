@@ -11,16 +11,20 @@ class FalloutMain
 {
 public:
 	std::uintptr_t vtable;//0x0
-	char padding0008[0x338];
-	std::uintptr_t platformSessionManagerPtr;//0x340
+	char padding0008[0x380];
+	std::uintptr_t platformSessionManagerPtr;//0x388
 };
 
 class PlatformSessionManager
 {
 public:
 	std::uintptr_t vtable;//0x0
-	char padding0008[0x78];
-	std::uintptr_t clientAccountManagerPtr;//0x80
+	char padding0008[0x88];
+	std::uintptr_t characterManagerPtr; //0x90
+	std::uintptr_t clientAccountManagerPtr;//0x98
+	std::uintptr_t entitlementMappingsManagerPtr;//0xA0
+	std::uintptr_t groupMatchmakingManagerPtr;//0xA8
+	std::uintptr_t clientLobbyDataPtr;//0xB0
 };
 // Updated offsets for version 1.7.23.11 0x4B0 to 0x4C0
 class BhkCharProxyController
@@ -43,24 +47,6 @@ public:
 	float velocityA[4];//0xA0
 	float velocityB[4];//0xB0
 };
-
-class TransferMessage
-{
-public:
-	std::uintptr_t vtable;//0x0
-	std::uint32_t sourceEntityId;//0x8
-	std::uint32_t playerEntityId;//0xC
-	BYTE bShouldSendResult;//0x10
-	char padding0011[3];
-	std::uint32_t destEntityId;//0x14
-	std::uint32_t itemServerHandleId;//0x18
-	std::uint32_t stashAccessEntityId;//0x1C
-	BYTE bCreateIfMissing;//0x20
-	BYTE bIsExpectingResult;//0x21
-	char padding0022[2];//0x22
-	int count;//0x24
-};
-
 class ClientAccountManager
 {
 public:
@@ -83,15 +69,6 @@ public:
 	std::uintptr_t listEntryArrayPtr;//0xB0
 	char padding00B8[0x9];
 	BYTE listEntryArraySize;//0xC1
-};
-
-class RequestActivateRefMessage
-{
-public:
-	std::uintptr_t vtable;//0x0
-	std::uint32_t formId;//0x8
-	BYTE choice;//0xC
-	BYTE forceActivate;//0xB
 };
 
 class ClientAccountBuffer
@@ -151,15 +128,6 @@ public:
 	std::uintptr_t instancedNamePtr;//0x10
 };
 
-class RequestHitsOnActors
-{
-public:
-	std::uintptr_t vtable;//0x0
-	std::uintptr_t hitsArrayPtr;//0x8
-	std::uintptr_t hitsArrayEnd;//0x10
-	char padding0018[0x48];
-};
-
 class BgsQuestText
 {
 public:
@@ -204,72 +172,6 @@ public:
 	std::uintptr_t modDataPtr;//0x10
 };
 
-class Hits
-{
-public:
-	//std::uint32_t valueA;//0x0 (Local Player)
-	//std::uint32_t valueB;//0x4 (Entity)
-	//std::uint32_t valueC;//0x8 (Projectile == 0)
-	//std::uint32_t initializationType;//0xC (3 == Default/Gun, 4 == Explosive)
-	//std::uint32_t uiWeaponServerId;//0x10
-	//std::uint32_t limbEnum;//0x20 (0xFFFFFFFF == Default/Body)
-	//std::uint32_t hitEffectId;//0x18 (0 == Default/Gun)
-	//std::uint32_t uEquipIndex;//0x1C (0 == Default/Gun)
-	//BYTE uAckIndex;//0x20 (Shots Hit, Always > 0)
-	//BYTE uFireId;//0x21 (Shots Fired)
-	//BYTE bPredictedKill;//0x22
-	//char padding0023;//0x23 (0)
-	//float explosionLocationX;//0x24
-	//float explosionLocationY;//0x28
-	//float explosionLocationZ;//0x2C
-	//float fProjectilePower;//0x30 (1.0f == Default)
-	//BYTE bVatsAttack;//0x34
-	//BYTE bVatsCritical;//0x35
-	//BYTE bTargetWasDead;//0x36
-	//char padding0037;//0x37 (0)
-
-	char pad_0000[4]; //0x0000
-	uint32_t target; //0x0004
-	uint32_t projectile; //0x0008 can be 0
-	uint32_t source; //0x000C
-	char pad_0010[8]; //0x0010
-	uint8_t uAckIndex; //0x0018
-	uint8_t uFireId; //0x0019
-	char pad_001A[2]; //0x001A
-	uint32_t initializationType; //0x001C
-	uint32_t uiWeaponServerId; //0x0020
-	uint32_t limbEnum; //0x0024
-	char pad_0028[12]; //0x0028
-	float fProjectilePower; //0x0034
-	char pad_0038[4]; //0x0038
-};
-
-class RequestTeleportMessage
-{
-public:
-	std::uintptr_t vtable;//0x0
-	Vector3 position;//0x8
-	Vector3 rotation;//0x14
-	std::uintptr_t cellPtr;//0x20
-	BYTE unk;
-};
-
-class ClientStateMsg
-{
-public:
-	std::uintptr_t vtable;//0x0
-	std::uintptr_t clientState;//0x8
-};
-
-class RequestInventorySyncMsg
-{
-public:
-	uintptr_t vtable; //0x0000
-	uint32_t targetFormId; //0x0008
-	uint8_t unk; //0x000C == 1?
-}; //Size: 0x000D
-
-
 class Chargen
 {
 public:
@@ -288,88 +190,6 @@ public:
 	std::uint32_t baseObjectFormId;
 	std::uintptr_t flag;
 	std::string name;
-};
-
-class ExternalFunction
-{
-public:
-	BYTE ASM[0x20]				//0x0
-	{
-		0x48, 0x8B, 0xC1,		//mov rax, rcx
-		0x48, 0x8B, 0x48, 0x08,	//mov rcx, [rax + 0x08]
-		0x48, 0x8B, 0x50, 0x10,	//mov rdx, [rax + 0x10]
-		0x4C, 0x8B, 0x40, 0x18,	//mov r8, [rax + 0x18]
-		0x4C, 0x8B, 0x48, 0x20,	//mov r9, [rax + 0x20]
-		0x48, 0x8B, 0x00,		//mov rax, [rax]
-		0xFF, 0xE0,				//jmp rax
-		0xCC, 0xCC, 0xCC, 0xCC,	//Padding
-		0xCC, 0xCC, 0xCC, 0xCC,	//Padding
-	};
-	std::uintptr_t address{};			//0x20 (0x0)
-	std::uintptr_t rcx{};				//0x28 (0x8)
-	std::uintptr_t rdx{};				//0x30 (0x10)
-	std::uintptr_t r8{};				//0x38 (0x18)
-	std::uintptr_t r9{};				//0x40 (0x20)
-};
-
-class FreezeAp
-{
-public:
-	BYTE freezeApAsm[0x70]
-	{
-		0x8B, 0xD6,                                 //mov edx, esi
-		0x48, 0x8B, 0xC8,                           //mov rcx, rax
-		0x48, 0x8B, 0x5C, 0x24, 0x30,               //mov rbx, [rsp+30]
-		0x48, 0x8B, 0x74, 0x24, 0x38,               //mov rsi, [rsp+38]
-		0x48, 0x83, 0xC4, 0x20,                     //add rsp, 20
-		0x5F,                                       //pop rdi
-		0x49, 0x81, 0xF8, 0x00, 0x00, 0x01, 0x00,   //cmp r8, 00010000
-		0x7C, 0x19,                                 //jl OriginalFunction
-		0x41, 0x8B, 0x40, 0x20,                     //mov eax, [r8+20]
-		0x3D, 0xD5, 0x02, 0x00, 0x00,               //cmp eax, 000002D5
-		0x75, 0x0E,                                 //jne OriginalFunction
-		0x31, 0xC0,                                 //xor eax, eax
-		0x39, 0x05, 0x40, 0x00, 0x00, 0x00,         //cmp [FreezeApEnabled], eax
-		0x74, 0x04,                                 //je OriginalFunction
-		0x48, 0x63, 0xC2,                           //movsxd rax, edx
-		0xC3,                                       //ret 
-		0x80, 0x79, 0x0C, 0x00,                     //cmp byte ptr [rcx+0C],00
-		0x48, 0x63, 0xC2,                           //movsxd  rax,edx
-		0xF3, 0x0F, 0x10, 0x04, 0x81,               //movss xmm0,[rcx+rax*4]
-		0x48, 0x8D, 0x14, 0x81,                     //lea rdx,[rcx+rax*4]
-		0x74, 0x1F,                                 //je ret
-		0xF3, 0x0F, 0x11, 0x44, 0x24, 0x08,         //movss [rsp+08],xmm0
-		0x80, 0xCA, 0x20,                           //or dl,20
-		0x30, 0x54, 0x24, 0x08,                     //xor [rsp+08],dl
-		0x30, 0x54, 0x24, 0x09,                     //xor [rsp+09],dl
-		0x30, 0x54, 0x24, 0x0A,                     //xor [rsp+0A],dl
-		0x30, 0x54, 0x24, 0x0B,                     //xor [rsp+0B],dl
-		0xF3, 0x0F, 0x10, 0x44, 0x24, 0x08,         //movss xmm0,[rsp+08]
-		0xC3,                                       //ret 
-		0xCC, 0xCC, 0xCC, 0xCC,                     //Padding
-		0xCC, 0xCC, 0xCC, 0xCC,                     //Padding
-	};
-	int freezeApEnabled{};
-};
-
-class TargetLocking
-{
-public:
-	BYTE redirectionAsm[0x40]
-	{
-		0x48, 0xBB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x00,     //mov rbx, 0xF000000000000
-		0x48, 0x39, 0x1D, 0x2F, 0x00, 0x00, 0x00,                       //cmp [TargetLockingPtr], rbx
-		0x7D, 0x12,                                                     //jnl OriginalPtr
-		0x48, 0x8B, 0x1D, 0x26, 0x00, 0x00, 0x00,                       //mov rbx, [TargetLockingPtr]
-		0x48, 0x81, 0xFB, 0x00, 0x00, 0x01, 0x00,                       //cmp rbx, 0x10000
-		0x7E, 0x02,                                                     //jle OriginalPtr
-		0xEB, 0x05,                                                     //jmp OriginalFunction
-		0x48, 0x8B, 0x5C, 0x24, 0x50,                                   //mov rbx, [rsp+50]
-		0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                             //jmp (Below)
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                 //OriginalFunction
-		0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,                 //Padding
-	};
-	std::uintptr_t targetLockingPtr{};
 };
 
 enum class ItemTypes
@@ -418,7 +238,6 @@ public:
 	static std::unordered_map<int, std::string> GetFavoritedWeapons();
 	static std::uint32_t GetFavoritedWeaponId(BYTE favouriteIndex);
 	static char FavoriteIndex2Slot(BYTE favoriteIndex);
-	static bool SendDamage(std::uintptr_t targetPtr, std::uint32_t weaponId, BYTE* shotsHit, BYTE* shotsFired, BYTE count);
 
 	//nuke codes
 	static void UpdateNukeCodes();
@@ -430,21 +249,8 @@ public:
 	static bool SaveTeleportPosition(int index);
 	static bool RequestTeleport(int index);
 
-	//freezeAP
-	static bool FreezeActionPoints(std::uintptr_t& freezeApPage, bool& freezeApPageValid, bool enabled);
-
 	//noclip
-	static bool SetClientState(std::uintptr_t clientState);
 	static void Noclip(bool enabled);
-
-	//freecam
-	static void FreeCam(bool enabled);
-	static bool SetFreeCamSpeed(float speed);
-	static bool TeleportToFreeCam();
-
-	//item transfer
-	static bool CheckItemTransferList();
-	static bool TransferItems(std::uint32_t sourceFormId, std::uint32_t destinationFormId);
 
 	//esp
 	static bool UpdateBufferEntityList();
@@ -454,11 +260,6 @@ public:
 
 	static bool ReferenceSwap(std::uint32_t& sourceFormId, std::uint32_t& destinationFormId);
 
-	static bool DamageRedirection(std::uintptr_t targetPtr, std::uintptr_t& targetingPage, bool& targetingPageValid, bool isExiting, bool enabled);
-
-	static bool PositionSpoofing(bool enabled);
-
-	static bool MeleeAttack();
 	static bool ChargenEditing();
 
 	static bool IsFloraHarvested(char harvestFlagA, char harvestFlagB);
@@ -472,9 +273,6 @@ public:
 	static bool    CheckFormIdArray(std::uint32_t formId, const bool* enabledArray, const std::uint32_t* formIdArray, int size);
 	static std::uintptr_t RttiGetNamePtr(std::uintptr_t vtable);
 	static bool    VtableSwap(std::uintptr_t dst, std::uintptr_t src);
-
-	static bool PatchIntegrityCheck();
-	static bool PatchDetectFlag();
 
 	static ItemInfo GetItemInfo(const TesObjectRefr& entity);
 	static std::string GetEntityName(std::uintptr_t ptr);
@@ -496,10 +294,10 @@ private:
 	static bool MovePlayer();
 
 	static std::uint32_t GetEntityId(const TesObjectRefr& entityData);
-	static bool SendHitsToServer(Hits* hitsData, size_t hitsDataSize);
 	static std::uintptr_t GetNukeCodePtr(std::uint32_t formId);
 	static std::string GetInstancedItemName(std::uintptr_t displayPtr);
 
 	virtual void Dummy() = 0;
 };
+
 
